@@ -18,7 +18,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.7
+          gradle-version: 8.9
 
       - name: Arrange project
         run: |
@@ -56,7 +56,7 @@ jobs:
 
           cat > $P/build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.5.2" apply false
+              id("com.android.application") version "8.7.3" apply false
               id("org.jetbrains.kotlin.android") version "1.9.24" apply false
           }
           EOF
@@ -76,7 +76,7 @@ jobs:
 
           android {
               namespace = "com.example.fluidplay"
-              compileSdk = 34
+              compileSdk = 35
 
               defaultConfig {
                   applicationId = "com.example.fluidplay"
@@ -89,7 +89,10 @@ jobs:
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
-              kotlinOptions { jvmTarget = "17" }
+              kotlinOptions {
+                  jvmTarget = "17"
+                  freeCompilerArgs += "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+              }
               buildFeatures { compose = true }
               composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
           }
@@ -108,7 +111,17 @@ jobs:
 
       - name: Build debug APK
         working-directory: proj
-        run: gradle assembleDebug --stacktrace
+        run: |
+          set +e
+          gradle assembleDebug --stacktrace --console=plain > ../build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            grep -nE "^e: |error:|What went wrong|Could not|Execution failed|requires|Caused by|Unresolved" -A2 ../build.log | head -40 > ../errors.txt
+            { echo "## Build errors"; echo '```'; cat ../errors.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            msg=$(head -c 1500 ../errors.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Gradle error::$msg"
+          fi
+          exit $code
 
       - uses: actions/upload-artifact@v4
         with:
